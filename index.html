@@ -1,0 +1,324 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <!-- https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'"
+    />
+    <meta
+      http-equiv="X-Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'"
+    />
+    <title>Hair Salon POS System</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-container">
+      <!-- Header -->
+      <header class="header">
+        <div class="logo">
+          <h1>💇‍♀️ Salon POS</h1>
+        </div>
+        <div class="header-info">
+          <span class="date-time" id="dateTime"></span>
+          <span class="cashier">Cashier: Admin</span>
+          <button class="btn btn-secondary" id="logout">Logout</button>
+        </div>
+      </header>
+
+      <!-- Main Content -->
+      <main class="main-content">
+        <!-- Services Panel -->
+        <section class="services-panel">
+          <h2>Services</h2>
+          <div class="service-categories">
+            <button class="category-btn active" data-category="haircut">
+              Haircuts
+            </button>
+            <button class="category-btn" data-category="color">Coloring</button>
+            <button class="category-btn" data-category="treatment">
+              Treatments
+            </button>
+            <button class="category-btn" data-category="styling">
+              Styling
+            </button>
+          </div>
+
+          <div class="services-grid" id="servicesGrid">
+            <!-- Haircut Services -->
+            <div
+              class="service-item"
+              data-category="haircut"
+              data-name="Women's Cut"
+              data-price="65.00"
+            >
+              <span class="service-name">Women's Cut</span>
+              <span class="service-price">$65.00</span>
+            </div>
+            <div
+              class="service-item"
+              data-category="haircut"
+              data-name="Men's Cut"
+              data-price="45.00"
+            >
+              <span class="service-name">Men's Cut</span>
+              <span class="service-price">$45.00</span>
+            </div>
+            <div
+              class="service-item"
+              data-category="haircut"
+              data-name="Children's Cut"
+              data-price="35.00"
+            >
+              <span class="service-name">Children's Cut</span>
+              <span class="service-price">$35.00</span>
+            </div>
+            <div
+              class="service-item"
+              data-category="haircut"
+              data-name="Beard Trim"
+              data-price="25.00"
+            >
+              <span class="service-name">Beard Trim</span>
+              <span class="service-price">$25.00</span>
+            </div>
+
+            <!-- Color Services -->
+            <div
+              class="service-item"
+              data-category="color"
+              data-name="Full Color"
+              data-price="120.00"
+              style="display: none"
+            >
+              <span class="service-name">Full Color</span>
+              <span class="service-price">$120.00</span>
+            </div>
+            <div
+              class="service-item"
+              data-category="color"
+              data-name="Highlights"
+              data-price="150.00"
+              style="display: none"
+            >
+              <span class="service-name">Highlights</span>
+              <span class="service-price">$150.00</span>
+            </div>
+            <div
+              class="service-item"
+              data-category="color"
+              data-name="Root Touch-up"
+              data-price="80.00"
+              style="display: none"
+            >
+              <span class="service-name">Root Touch-up</span>
+              <span class="service-price">$80.00</span>
+            </div>
+            <div
+              class="service-item"
+              data-category="color"
+              data-name="Balayage"
+              data-price="200.00"
+              style="display: none"
+            >
+              <span class="service-name">Balayage</span>
+              <span class="service-price">$200.00</span>
+            </div>
+
+            <!-- Treatment Services -->
+            <div
+              class="service-item"
+              data-category="treatment"
+              data-name="Deep Conditioning"
+              data-price="40.00"
+              style="display: none"
+            >
+              <span class="service-name">Deep Conditioning</span>
+              <span class="service-price">$40.00</span>
+            </div>
+            <div
+              class="service-item"
+              data-category="treatment"
+              data-name="Keratin Treatment"
+              data-price="250.00"
+              style="display: none"
+            >
+              <span class="service-name">Keratin Treatment</span>
+              <span class="service-price">$250.00</span>
+            </div>
+            <div
+              class="service-item"
+              data-category="treatment"
+              data-name="Scalp Treatment"
+              data-price="60.00"
+              style="display: none"
+            >
+              <span class="service-name">Scalp Treatment</span>
+              <span class="service-price">$60.00</span>
+            </div>
+
+            <!-- Styling Services -->
+            <div
+              class="service-item"
+              data-category="styling"
+              data-name="Blowout"
+              data-price="45.00"
+              style="display: none"
+            >
+              <span class="service-name">Blowout</span>
+              <span class="service-price">$45.00</span>
+            </div>
+            <div
+              class="service-item"
+              data-category="styling"
+              data-name="Updo"
+              data-price="85.00"
+              style="display: none"
+            >
+              <span class="service-name">Updo</span>
+              <span class="service-price">$85.00</span>
+            </div>
+            <div
+              class="service-item"
+              data-category="styling"
+              data-name="Curls/Waves"
+              data-price="55.00"
+              style="display: none"
+            >
+              <span class="service-name">Curls/Waves</span>
+              <span class="service-price">$55.00</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- Order Panel -->
+        <section class="order-panel">
+          <div class="customer-info">
+            <h3>Customer Information</h3>
+            <div class="customer-inputs">
+              <input
+                type="text"
+                id="customerName"
+                placeholder="Customer Name"
+              />
+              <input type="tel" id="customerPhone" placeholder="Phone Number" />
+            </div>
+          </div>
+
+          <div class="order-items">
+            <h3>Order Items</h3>
+            <div class="items-list" id="orderItems">
+              <div class="empty-order">No items added</div>
+            </div>
+          </div>
+
+          <div class="order-summary">
+            <div class="summary-row">
+              <span>Subtotal:</span>
+              <span id="subtotal">$0.00</span>
+            </div>
+            <div class="summary-row">
+              <span>Tax (8.25%):</span>
+              <span id="tax">$0.00</span>
+            </div>
+            <div class="summary-row total">
+              <span>Total:</span>
+              <span id="total">$0.00</span>
+            </div>
+          </div>
+
+          <div class="payment-methods">
+            <h3>Payment Method</h3>
+            <div class="payment-buttons">
+              <button class="payment-btn" data-method="cash">💵 Cash</button>
+              <button class="payment-btn" data-method="card">💳 Card</button>
+              <button class="payment-btn" data-method="digital">
+                📱 Digital
+              </button>
+            </div>
+          </div>
+
+          <div class="action-buttons">
+            <button class="btn btn-secondary" id="clearOrder">
+              Clear Order
+            </button>
+            <button class="btn btn-primary" id="processPayment">
+              Process Payment
+            </button>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <!-- Payment Modal -->
+    <div class="modal" id="paymentModal">
+      <div class="modal-content">
+        <h2>Process Payment</h2>
+        <div class="payment-details">
+          <p>Total Amount: <span id="modalTotal">$0.00</span></p>
+          <p>Payment Method: <span id="modalPaymentMethod">Cash</span></p>
+          <div class="cash-payment" id="cashPayment">
+            <label for="amountReceived">Amount Received:</label>
+            <input
+              type="number"
+              id="amountReceived"
+              step="0.01"
+              placeholder="0.00"
+            />
+            <p>Change: <span id="change">$0.00</span></p>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" id="cancelPayment">Cancel</button>
+          <button class="btn btn-primary" id="confirmPayment">
+            Confirm Payment
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Receipt Modal -->
+    <div class="modal" id="receiptModal">
+      <div class="modal-content">
+        <div class="receipt" id="receipt">
+          <div class="receipt-header">
+            <h2>Hair Salon</h2>
+            <p>123 Beauty Street</p>
+            <p>Phone: (555) 123-4567</p>
+            <p>Date: <span id="receiptDate"></span></p>
+          </div>
+          <div class="receipt-customer">
+            <p>Customer: <span id="receiptCustomer"></span></p>
+            <p>Phone: <span id="receiptPhone"></span></p>
+          </div>
+          <div class="receipt-items" id="receiptItems"></div>
+          <div class="receipt-total">
+            <p>Subtotal: <span id="receiptSubtotal"></span></p>
+            <p>Tax: <span id="receiptTax"></span></p>
+            <p>
+              <strong>Total: <span id="receiptTotal"></span></strong>
+            </p>
+            <p>Payment: <span id="receiptPayment"></span></p>
+            <p class="change-line">Change: <span id="receiptChange"></span></p>
+          </div>
+          <div class="receipt-footer">
+            <p>Thank you for your visit!</p>
+            <p>Please come again</p>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" id="printReceipt">
+            Print Receipt
+          </button>
+          <button class="btn btn-primary" id="newTransaction">
+            New Transaction
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <script src="script.js"></script>
+  </body>
+</html>
