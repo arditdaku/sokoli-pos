@@ -49,6 +49,10 @@ class POSSystem {
       window.electronAPI.logout();
     });
 
+    document.getElementById('selectAppointment').addEventListener('click', () => {
+      this.showAppointmentsModal();
+    });
+
     // Modal buttons
     document.getElementById("cancelPayment").addEventListener("click", () => {
       this.hidePaymentModal();
@@ -68,6 +72,10 @@ class POSSystem {
 
     document.getElementById("newTransaction").addEventListener("click", () => {
       this.newTransaction();
+    });
+
+    document.getElementById("cancelSelectAppointment").addEventListener("click", () => {
+      this.hideAppointmentsModal();
     });
 
     // Close modals when clicking outside
@@ -164,7 +172,7 @@ class POSSystem {
           <div class="item-name">${item.name}</div>
           ${item.quantity > 1 ? `<div class="item-quantity">Qty: ${item.quantity}</div>` : ""}
         </div>
-        <div class="item-price">$${(item.price * item.quantity).toFixed(2)}</div>
+        <div class="item-price">${(item.price * item.quantity).toFixed(2)}</div>
         <button class="remove-item" onclick="pos.removeItemFromOrder(${index})">×</button>
       </div>
     `
@@ -180,9 +188,9 @@ class POSSystem {
     const tax = subtotal * this.taxRate;
     const total = subtotal + tax;
 
-    document.getElementById("subtotal").textContent = `$${subtotal.toFixed(2)}`;
-    document.getElementById("tax").textContent = `$${tax.toFixed(2)}`;
-    document.getElementById("total").textContent = `$${total.toFixed(2)}`;
+    document.getElementById("subtotal").textContent = `${subtotal.toFixed(2)}`;
+    document.getElementById("tax").textContent = `${tax.toFixed(2)}`;
+    document.getElementById("total").textContent = `${total.toFixed(2)}`;
   }
 
   selectPaymentMethod(method) {
@@ -214,7 +222,7 @@ class POSSystem {
     }
 
     const total = this.getTotal();
-    document.getElementById("modalTotal").textContent = `$${total.toFixed(2)}`;
+    document.getElementById("modalTotal").textContent = `${total.toFixed(2)}`;
 
     const paymentMethods = {
       cash: "💵 Cash",
@@ -241,6 +249,107 @@ class POSSystem {
     document.getElementById("paymentModal").classList.remove("show");
   }
 
+  async showAppointmentsModal() {
+    const appointmentsModal = document.getElementById("appointmentsModal");
+    appointmentsModal.classList.add("show");
+    await this.fetchAppointments();
+  }
+
+  hideAppointmentsModal() {
+    const appointmentsModal = document.getElementById("appointmentsModal");
+    appointmentsModal.classList.remove("show");
+  }
+
+  async fetchAppointments() {
+    const appointmentsList = document.getElementById("appointmentsList");
+    appointmentsList.innerHTML = "<p>Loading appointments...</p>";
+
+    try {
+      const accessToken = sessionStorage.getItem("accessToken");
+      const response = await fetch("http://localhost:3000/appointments", {
+        headers: {
+          "Authorization": `Bearer ${accessToken}`
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch appointments");
+      }
+
+      const appointments = await response.json();
+      this.displayAppointments(appointments);
+    } catch (error) {
+      appointmentsList.innerHTML = `<p>Error: ${error.message}</p>`;
+      console.error("Error fetching appointments:", error);
+    }
+  }
+
+  displayAppointments(appointments) {
+    const appointmentsList = document.getElementById("appointmentsList");
+    appointmentsList.innerHTML = "";
+
+    if (appointments.length === 0) {
+      appointmentsList.innerHTML = "<p>No appointments found.</p>";
+      return;
+    }
+
+    appointments.forEach(appointment => {
+      const appointmentElement = document.createElement("div");
+      appointmentElement.classList.add("appointment-item");
+      appointmentElement.innerHTML = `
+        <div class="appointment-info">
+          <p><strong>Customer:</strong> ${appointment.customer.name}</p>
+          <p><strong>Date:</strong> ${new Date(appointment.date).toLocaleDateString()}</p>
+          <p><strong>Time:</strong> ${appointment.startTime} - ${appointment.endTime}</p>
+        </div>
+        <button class="btn btn-primary select-appointment-btn" data-appointment-id="${appointment.id}">Select</button>
+      `;
+      appointmentsList.appendChild(appointmentElement);
+    });
+
+    document.querySelectorAll(".select-appointment-btn").forEach(btn => {
+      btn.addEventListener("click", (e) => {
+        const appointmentId = e.target.dataset.appointmentId;
+        this.selectAppointment(appointmentId);
+      });
+    });
+  }
+
+  async selectAppointment(appointmentId) {
+    try {
+      const accessToken = sessionStorage.getItem("accessToken");
+      const response = await fetch(`http://localhost:3000/appointments/${appointmentId}`, {
+        headers: {
+          "Authorization": `Bearer ${accessToken}`
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch appointment details");
+      }
+
+      const appointment = await response.json();
+      this.clearOrder();
+
+      document.getElementById("customerName").value = appointment.customer.name;
+      document.getElementById("customerPhone").value = appointment.customer.phone;
+
+      appointment.services.forEach(service => {
+        this.addServiceToOrder({
+          dataset: {
+            name: service.name,
+            price: service.price
+          }
+        });
+      });
+
+      this.hideAppointmentsModal();
+    } catch (error) {
+      console.error("Error selecting appointment:", error);
+      alert("Error selecting appointment. Please try again.");
+    }
+  }
+
   calculateChange() {
     const total = this.getTotal();
     const amountReceived =
@@ -248,7 +357,7 @@ class POSSystem {
     const change = amountReceived - total;
 
     document.getElementById("change").textContent =
-      `$${Math.max(0, change).toFixed(2)}`;
+      `${Math.max(0, change).toFixed(2)}`;
   }
 
   processPayment() {
@@ -297,17 +406,17 @@ class POSSystem {
         (item) => `
       <div class="receipt-item">
         <span>${item.name} ${item.quantity > 1 ? `x${item.quantity}` : ""}</span>
-        <span>$${(item.price * item.quantity).toFixed(2)}</span>
+        <span>${(item.price * item.quantity).toFixed(2)}</span>
       </div>
     `
       )
       .join("");
 
     document.getElementById("receiptSubtotal").textContent =
-      `$${subtotal.toFixed(2)}`;
-    document.getElementById("receiptTax").textContent = `$${tax.toFixed(2)}`;
+      `${subtotal.toFixed(2)}`;
+    document.getElementById("receiptTax").textContent = `${tax.toFixed(2)}`;
     document.getElementById("receiptTotal").textContent =
-      `$${total.toFixed(2)}`;
+      `${total.toFixed(2)}`;
 
     const paymentMethods = {
       cash: "Cash",
@@ -320,7 +429,7 @@ class POSSystem {
     const changeLine = document.querySelector(".change-line");
     if (this.selectedPaymentMethod === "cash" && change > 0) {
       document.getElementById("receiptChange").textContent =
-        `$${change.toFixed(2)}`;
+        `${change.toFixed(2)}`;
       changeLine.classList.add("show");
     } else {
       changeLine.classList.remove("show");
@@ -338,10 +447,10 @@ class POSSystem {
       this.orderItems
         .map(
           (item) =>
-            `${item.name}${item.quantity > 1 ? ` x${item.quantity}` : ""}    $${(item.price * item.quantity).toFixed(2)}`
+            `${item.name}${item.quantity > 1 ? ` x${item.quantity}` : ""}    ${(item.price * item.quantity).toFixed(2)}`
         )
         .join("\n") + "\n";
-    const summary = `Subtotal: $${this.getSubtotal().toFixed(2)}\nTax: $${this.getTax().toFixed(2)}\nTotal: $${this.getTotal().toFixed(2)}\nPayment: ${this.selectedPaymentMethod.charAt(0).toUpperCase() + this.selectedPaymentMethod.slice(1)}\n`;
+    const summary = `Subtotal: ${this.getSubtotal().toFixed(2)}\nTax: ${this.getTax().toFixed(2)}\nTotal: ${this.getTotal().toFixed(2)}\nPayment: ${this.selectedPaymentMethod.charAt(0).toUpperCase() + this.selectedPaymentMethod.slice(1)}\n`;
     const change = document.getElementById("receiptChange")?.textContent || "";
     const footer =
       (change ? `Change: ${change}\n` : "") +

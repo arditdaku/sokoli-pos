@@ -197,6 +197,7 @@
         <section class="order-panel">
           <div class="customer-info">
             <h3>Customer Information</h3>
+            <button class="btn btn-secondary" id="selectAppointment">Select Appointment</button>
             <div class="customer-inputs">
               <input
                 type="text"
@@ -315,6 +316,19 @@
           <button class="btn btn-primary" id="newTransaction">
             New Transaction
           </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Appointments Modal -->
+    <div class="modal" id="appointmentsModal">
+      <div class="modal-content">
+        <h2>Select Appointment</h2>
+        <div class="appointments-list" id="appointmentsList">
+          <!-- Appointments will be dynamically loaded here -->
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" id="cancelSelectAppointment">Cancel</button>
         </div>
       </div>
     </div>

@@ -599,3 +599,31 @@ body {
   margin-top: 1rem;
   height: 1rem;
 }
+
+/* Appointments Modal */
+.appointments-list {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.appointment-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px;
+  border-bottom: 1px solid #eee;
+}
+
+.appointment-item:last-child {
+  border-bottom: none;
+}
+
+.appointment-info p {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.select-appointment-btn {
+  padding: 8px 15px;
+  font-size: 14px;
+}
