@@ -26,7 +26,7 @@ const createAuthWindow = () => {
   });
 };
 
-const createMainWindow = () => {
+const createMainWindow = (workerName = 'Admin') => {
   mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
@@ -41,7 +41,7 @@ const createMainWindow = () => {
     titleBarStyle: "default",
   });
 
-  mainWindow.loadFile("index.html");
+  mainWindow.loadFile("index.html", { query: { worker: workerName } });
 
   mainWindow.on('closed', () => {
     mainWindow = null;
@@ -64,11 +64,11 @@ app.on("window-all-closed", () => {
   }
 });
 
-ipcMain.on('login-success', () => {
+ipcMain.on('login-success', (event, workerName) => {
   if (authWindow) {
     authWindow.close();
   }
-  createMainWindow();
+  createMainWindow(workerName);
 });
 
 ipcMain.on('logout', () => {

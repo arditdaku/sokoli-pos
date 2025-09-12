@@ -533,6 +533,12 @@ class POSSystem {
 // Initialize POS system when page loads
 let pos;
 document.addEventListener("DOMContentLoaded", () => {
+  const params = new URLSearchParams(window.location.search);
+  const cashier = params.get("worker") || "Admin";
+  const cashierEl = document.querySelector(".cashier");
+  if (cashierEl) {
+    cashierEl.textContent = `Cashier: ${cashier}`;
+  }
   pos = new POSSystem();
 });
 

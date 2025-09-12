@@ -4,16 +4,21 @@ document.addEventListener('DOMContentLoaded', () => {
   const loginForm = document.getElementById('loginForm');
   const errorMessage = document.getElementById('errorMessage');
 
+  // Simple mapping of PIN codes to worker names
+  const workers = {
+    '1234': 'Alice',
+    '5678': 'Bob'
+  };
+
   loginForm.addEventListener('submit', (e) => {
     e.preventDefault();
-    const username = document.getElementById('username').value;
-    const password = document.getElementById('password').value;
+    const pin = document.getElementById('pin').value;
 
-    // In a real application, you would validate against a database or API.
-    if (username === 'admin' && password === 'password') {
-      ipcRenderer.send('login-success');
+    const workerName = workers[pin];
+    if (workerName) {
+      ipcRenderer.send('login-success', workerName);
     } else {
-      errorMessage.textContent = 'Invalid username or password';
+      errorMessage.textContent = 'Invalid PIN';
     }
   });
 });
