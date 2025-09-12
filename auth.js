@@ -6,14 +6,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
   loginForm.addEventListener('submit', (e) => {
     e.preventDefault();
-    const username = document.getElementById('username').value;
-    const password = document.getElementById('password').value;
+    const pin = document.getElementById('pin').value;
+    const workers = JSON.parse(localStorage.getItem('workers') || '[]');
+    const worker = workers.find((w) => w.pin === pin);
 
-    // In a real application, you would validate against a database or API.
-    if (username === 'admin' && password === 'password') {
+    if (worker) {
+      localStorage.setItem('currentWorker', worker.name);
       ipcRenderer.send('login-success');
     } else {
-      errorMessage.textContent = 'Invalid username or password';
+      errorMessage.textContent = 'Invalid PIN';
     }
   });
 });

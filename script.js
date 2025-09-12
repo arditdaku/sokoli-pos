@@ -10,6 +10,11 @@ class POSSystem {
     this.updateDateTime();
     this.showServices("haircut");
 
+    const currentWorker = localStorage.getItem("currentWorker");
+    if (currentWorker) {
+      document.querySelector(".cashier").textContent = "Cashier: " + currentWorker;
+    }
+
     // Update time every second
     setInterval(() => this.updateDateTime(), 1000);
   }
@@ -46,6 +51,7 @@ class POSSystem {
     });
 
     document.getElementById('logout').addEventListener('click', () => {
+      localStorage.removeItem('currentWorker');
       window.electronAPI.logout();
     });
 
