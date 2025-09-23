@@ -8,7 +8,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const renderWorkers = () => {
     const workers = loadWorkers();
     workerList.innerHTML = workers
-      .map((w) => `<li>${w.name} - ${w.pin}</li>`) 
+      .map((w) => `<li>${w.name} - ${'*'.repeat(w.pin.length)}</li>`) 
       .join('');
   };
 
