@@ -6,12 +6,55 @@ class POSSystem {
     this.selectedPaymentMethod = "cash";
     this.taxRate = 0.0825; // 8.25%
 
+    this.apiBaseUrl = "http://localhost:3000";
+    this.appointmentNotificationsPath = "/appointments/notifications";
+
+    const globalConfig =
+      (typeof window !== "undefined" && window.__POS_CONFIG__) ||
+      (typeof window !== "undefined" && window.posConfig) ||
+      null;
+
+    if (globalConfig && typeof globalConfig.apiBaseUrl === "string") {
+      this.apiBaseUrl = globalConfig.apiBaseUrl;
+    }
+    if (
+      globalConfig &&
+      typeof globalConfig.appointmentNotificationsPath === "string"
+    ) {
+      this.appointmentNotificationsPath = globalConfig.appointmentNotificationsPath;
+    }
+
+    this.notifications = [];
+    this.maxNotifications = 25;
+    this.notificationToastsContainer = null;
+    this.notificationToggle = null;
+    this.notificationDropdown = null;
+    this.notificationList = null;
+    this.notificationCountBadge = null;
+
+    this.appointmentSocket = null;
+    this.notificationReconnectTimeout = null;
+    this.appointmentsModalOpen = false;
+    this.cachedAppointments = [];
+    this.pendingAppointmentsRefresh = null;
+    this.isFetchingAppointments = false;
+    this.appointmentsFetchCount = 0;
+    this.isShuttingDown = false;
+
+    this.initializeNotificationSystem();
     this.initializeEventListeners();
     this.updateDateTime();
     this.showServices("haircut");
 
     // Update time every second
     setInterval(() => this.updateDateTime(), 1000);
+
+    this.initializeAppointmentWebSocket();
+
+    window.addEventListener("beforeunload", () => {
+      this.isShuttingDown = true;
+      this.teardownAppointmentSocket();
+    });
   }
 
   initializeEventListeners() {
@@ -86,6 +129,578 @@ class POSSystem {
         }
       });
     });
+  }
+
+  initializeNotificationSystem() {
+    this.notificationToggle = document.getElementById("notificationsToggle");
+    this.notificationDropdown = document.getElementById("notificationsDropdown");
+    this.notificationList = document.getElementById("notificationsList");
+    this.notificationCountBadge = document.getElementById("notificationCount");
+    this.notificationToastsContainer = document.getElementById("notificationToasts");
+
+    this.renderNotificationList();
+    this.updateNotificationCount();
+
+    if (this.notificationToggle) {
+      this.notificationToggle.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        this.toggleNotificationsDropdown();
+      });
+    }
+
+    if (this.notificationDropdown) {
+      this.notificationDropdown.addEventListener("click", (event) => {
+        event.stopPropagation();
+      });
+    }
+
+    document.addEventListener("click", (event) => {
+      if (!this.notificationDropdown || !this.notificationToggle) {
+        return;
+      }
+
+      const toggleClicked = this.notificationToggle.contains(event.target);
+      const dropdownClicked = this.notificationDropdown.contains(event.target);
+
+      if (!toggleClicked && !dropdownClicked) {
+        this.hideNotificationsDropdown();
+      }
+    });
+  }
+
+  toggleNotificationsDropdown() {
+    if (!this.notificationDropdown) {
+      return;
+    }
+
+    if (this.notificationDropdown.classList.contains("show")) {
+      this.hideNotificationsDropdown();
+    } else {
+      this.showNotificationsDropdown();
+    }
+  }
+
+  showNotificationsDropdown() {
+    if (!this.notificationDropdown) {
+      return;
+    }
+
+    this.notificationDropdown.classList.add("show");
+    if (this.notificationToggle) {
+      this.notificationToggle.setAttribute("aria-expanded", "true");
+    }
+    this.markAllNotificationsAsRead();
+  }
+
+  hideNotificationsDropdown() {
+    if (!this.notificationDropdown) {
+      return;
+    }
+
+    this.notificationDropdown.classList.remove("show");
+    if (this.notificationToggle) {
+      this.notificationToggle.setAttribute("aria-expanded", "false");
+    }
+  }
+
+  markAllNotificationsAsRead() {
+    let updated = false;
+    this.notifications.forEach((notification) => {
+      if (!notification.read) {
+        notification.read = true;
+        updated = true;
+      }
+    });
+
+    if (updated) {
+      this.updateNotificationCount();
+      this.renderNotificationList();
+    }
+  }
+
+  updateNotificationCount() {
+    if (!this.notificationCountBadge) {
+      return;
+    }
+
+    const unreadCount = this.notifications.filter((notification) => !notification.read)
+      .length;
+
+    if (unreadCount > 0) {
+      this.notificationCountBadge.textContent =
+        unreadCount > 99 ? "99+" : unreadCount.toString();
+      this.notificationCountBadge.classList.remove("hidden");
+    } else {
+      this.notificationCountBadge.textContent = "0";
+      this.notificationCountBadge.classList.add("hidden");
+    }
+  }
+
+  renderNotificationList() {
+    if (!this.notificationList) {
+      return;
+    }
+
+    if (!this.notifications.length) {
+      this.notificationList.innerHTML =
+        '<p class="notifications-empty">No notifications yet.</p>';
+      return;
+    }
+
+    this.notificationList.innerHTML = "";
+    this.notifications.forEach((notification) => {
+      const item = document.createElement("div");
+      item.classList.add("notification-item");
+      if (!notification.read) {
+        item.classList.add("unread");
+      }
+
+      const messageEl = document.createElement("div");
+      messageEl.classList.add("notification-message");
+      messageEl.textContent = notification.message;
+
+      const metaEl = document.createElement("div");
+      metaEl.classList.add("notification-meta");
+      metaEl.textContent = this.formatNotificationTimestamp(notification.receivedAt);
+
+      item.appendChild(messageEl);
+      item.appendChild(metaEl);
+
+      this.notificationList.appendChild(item);
+    });
+  }
+
+  formatNotificationTimestamp(timestamp) {
+    if (!timestamp) {
+      return "";
+    }
+
+    const date = timestamp instanceof Date ? timestamp : new Date(timestamp);
+    if (Number.isNaN(date.getTime())) {
+      return "";
+    }
+
+    const now = new Date();
+    const sameDay =
+      date.getFullYear() === now.getFullYear() &&
+      date.getMonth() === now.getMonth() &&
+      date.getDate() === now.getDate();
+
+    const timeString = date.toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
+    if (sameDay) {
+      return `Today • ${timeString}`;
+    }
+
+    return `${date.toLocaleDateString()} • ${timeString}`;
+  }
+
+  addNotification(notification) {
+    if (!notification || !notification.message) {
+      return;
+    }
+
+    const record = {
+      id: notification.id || Date.now(),
+      message: notification.message,
+      receivedAt: notification.receivedAt ? new Date(notification.receivedAt) : new Date(),
+      read: Boolean(notification.read),
+      data: notification.data || null,
+      type: notification.type || null,
+    };
+
+    this.notifications.unshift(record);
+
+    if (this.notifications.length > this.maxNotifications) {
+      this.notifications.length = this.maxNotifications;
+    }
+
+    this.updateNotificationCount();
+    this.renderNotificationList();
+    this.showNotificationToast(record);
+  }
+
+  showNotificationToast(notification) {
+    if (!this.notificationToastsContainer || !notification.message) {
+      return;
+    }
+
+    while (this.notificationToastsContainer.childElementCount >= 3) {
+      this.notificationToastsContainer.removeChild(
+        this.notificationToastsContainer.firstElementChild
+      );
+    }
+
+    const toast = document.createElement("div");
+    toast.classList.add("notification-toast");
+    toast.textContent = notification.message;
+    this.notificationToastsContainer.appendChild(toast);
+
+    requestAnimationFrame(() => {
+      toast.classList.add("show");
+    });
+
+    const hideToast = () => {
+      toast.classList.remove("show");
+      toast.classList.add("hide");
+      setTimeout(() => {
+        if (toast.parentElement) {
+          toast.parentElement.removeChild(toast);
+        }
+      }, 350);
+    };
+
+    const duration =
+      typeof notification.duration === "number" ? notification.duration : 5000;
+    const timeoutId = setTimeout(hideToast, duration);
+
+    toast.addEventListener("click", () => {
+      clearTimeout(timeoutId);
+      hideToast();
+    });
+  }
+
+  initializeAppointmentWebSocket() {
+    if (typeof window.WebSocket === "undefined") {
+      console.warn("WebSocket is not supported in this environment.");
+      return;
+    }
+
+    if (this.notificationReconnectTimeout) {
+      clearTimeout(this.notificationReconnectTimeout);
+      this.notificationReconnectTimeout = null;
+    }
+
+    const wsUrl = this.buildAppointmentsWebSocketURL();
+    if (!wsUrl) {
+      return;
+    }
+
+    if (this.appointmentSocket) {
+      try {
+        this.appointmentSocket.close();
+      } catch (error) {
+        console.error("Error closing existing appointment socket:", error);
+      }
+      this.appointmentSocket = null;
+    }
+
+    let socket;
+    try {
+      socket = new WebSocket(wsUrl);
+    } catch (error) {
+      console.error("Failed to connect to appointment notifications:", error);
+      this.scheduleWebSocketReconnect();
+      return;
+    }
+
+    this.appointmentSocket = socket;
+
+    socket.addEventListener("open", () => {
+      console.info("Connected to appointment notifications.");
+    });
+
+    socket.addEventListener("message", (event) => {
+      this.handleAppointmentNotification(event.data);
+    });
+
+    socket.addEventListener("error", (error) => {
+      console.error("Appointment notification socket error:", error);
+    });
+
+    socket.addEventListener("close", () => {
+      this.appointmentSocket = null;
+      if (!this.isShuttingDown) {
+        this.scheduleWebSocketReconnect();
+      }
+    });
+  }
+
+  scheduleWebSocketReconnect() {
+    if (this.isShuttingDown) {
+      return;
+    }
+
+    if (this.notificationReconnectTimeout) {
+      clearTimeout(this.notificationReconnectTimeout);
+    }
+
+    this.notificationReconnectTimeout = setTimeout(() => {
+      this.initializeAppointmentWebSocket();
+    }, 5000);
+  }
+
+  teardownAppointmentSocket() {
+    if (this.notificationReconnectTimeout) {
+      clearTimeout(this.notificationReconnectTimeout);
+      this.notificationReconnectTimeout = null;
+    }
+
+    if (this.appointmentSocket) {
+      try {
+        this.appointmentSocket.close();
+      } catch (error) {
+        console.error("Error closing appointment socket:", error);
+      }
+      this.appointmentSocket = null;
+    }
+  }
+
+  buildAppointmentsWebSocketURL() {
+    if (!this.apiBaseUrl) {
+      return null;
+    }
+
+    let wsBase;
+    try {
+      const httpUrl = new URL(this.apiBaseUrl);
+      const protocol = httpUrl.protocol === "https:" ? "wss:" : "ws:";
+      let path = httpUrl.pathname || "";
+      if (path !== "/") {
+        path = path.replace(/\/$/, "");
+      } else {
+        path = "";
+      }
+
+      const endpoint = this.appointmentNotificationsPath || "/appointments/notifications";
+      wsBase = `${protocol}//${httpUrl.host}${path}${
+        endpoint.startsWith("/") ? endpoint : `/${endpoint}`
+      }`;
+    } catch (error) {
+      console.error("Invalid API base URL for WebSocket:", error);
+      return null;
+    }
+
+    try {
+      const url = new URL(wsBase);
+      const accessToken = sessionStorage.getItem("accessToken");
+      if (accessToken) {
+        url.searchParams.set("token", accessToken);
+      }
+      return url.toString();
+    } catch (error) {
+      console.error("Failed to construct appointment WebSocket URL:", error);
+      return null;
+    }
+  }
+
+  normalizeAppointmentNotificationType(type) {
+    if (type === null || typeof type === "undefined") {
+      return "created";
+    }
+
+    const normalized = type.toString().toLowerCase();
+
+    if (normalized.includes("cancel")) {
+      return "cancelled";
+    }
+    if (normalized.includes("update") || normalized.includes("resched") || normalized.includes("change")) {
+      return "updated";
+    }
+    if (normalized.includes("complete") || normalized.includes("done")) {
+      return "completed";
+    }
+    if (normalized.includes("remind")) {
+      return "reminder";
+    }
+    if (normalized.includes("check-in") || normalized.includes("checkin")) {
+      return "checkin";
+    }
+    if (normalized.includes("no-show") || normalized.includes("noshow")) {
+      return "no-show";
+    }
+    if (normalized.includes("create") || normalized.includes("new") || normalized.includes("add")) {
+      return "created";
+    }
+
+    return normalized || "created";
+  }
+
+  buildAppointmentNotificationMessage(type, appointment) {
+    const normalizedType = this.normalizeAppointmentNotificationType(type);
+    const descriptors = {
+      created: "New appointment scheduled",
+      updated: "Appointment updated",
+      cancelled: "Appointment cancelled",
+      completed: "Appointment completed",
+      reminder: "Appointment reminder",
+      checkin: "Appointment check-in",
+      "no-show": "Appointment marked as no-show",
+    };
+
+    const prefix = descriptors[normalizedType] || "Appointment update";
+
+    if (!appointment || typeof appointment !== "object") {
+      return `${prefix}.`;
+    }
+
+    const customerName =
+      appointment.customer && appointment.customer.name
+        ? appointment.customer.name
+        : "a customer";
+
+    const details = [];
+
+    if (appointment.date) {
+      const appointmentDate = new Date(appointment.date);
+      if (!Number.isNaN(appointmentDate.getTime())) {
+        details.push(appointmentDate.toLocaleDateString());
+      }
+    }
+
+    if (appointment.startTime && appointment.endTime) {
+      details.push(`${appointment.startTime} - ${appointment.endTime}`);
+    } else if (appointment.startTime) {
+      details.push(appointment.startTime);
+    }
+
+    let message = `${prefix} for ${customerName}`;
+    if (details.length) {
+      message += ` (${details.join(" • ")})`;
+    }
+    message += ".";
+
+    if (Array.isArray(appointment.services) && appointment.services.length > 0) {
+      const serviceNames = appointment.services
+        .map((service) => service?.name || service?.title || service)
+        .filter(Boolean);
+
+      if (serviceNames.length) {
+        message += ` Services: ${serviceNames.join(", ")}.`;
+      }
+    }
+
+    return message;
+  }
+
+  updateCachedAppointments(appointment, eventType) {
+    if (!appointment || typeof appointment !== "object") {
+      return;
+    }
+
+    if (!Array.isArray(this.cachedAppointments)) {
+      this.cachedAppointments = [];
+    }
+
+    const normalizedType = this.normalizeAppointmentNotificationType(eventType);
+    const appointmentId =
+      appointment.id ?? appointment._id ?? appointment.appointmentId ?? null;
+
+    if (appointmentId !== null) {
+      const existingIndex = this.cachedAppointments.findIndex((item) => {
+        const existingId = item.id ?? item._id ?? item.appointmentId ?? null;
+        return existingId === appointmentId;
+      });
+
+      if (normalizedType === "cancelled") {
+        if (existingIndex !== -1) {
+          this.cachedAppointments.splice(existingIndex, 1);
+        }
+        return;
+      }
+
+      if (existingIndex !== -1) {
+        this.cachedAppointments[existingIndex] = appointment;
+      } else {
+        this.cachedAppointments.unshift(appointment);
+      }
+    } else if (normalizedType !== "cancelled") {
+      this.cachedAppointments.unshift(appointment);
+    }
+  }
+
+  handleAppointmentNotification(rawMessage) {
+    if (!rawMessage) {
+      return;
+    }
+
+    let payload = null;
+    let messageText = "";
+
+    if (typeof rawMessage === "string") {
+      try {
+        payload = JSON.parse(rawMessage);
+      } catch (error) {
+        messageText = rawMessage;
+      }
+    } else if (typeof rawMessage === "object") {
+      payload = rawMessage;
+    }
+
+    let appointment = null;
+    let type = null;
+
+    if (payload && typeof payload === "object") {
+      messageText = payload.message || messageText;
+      type =
+        payload.type ||
+        payload.event ||
+        payload.eventType ||
+        payload.action ||
+        payload.status ||
+        null;
+
+      appointment =
+        payload.appointment ||
+        payload.data ||
+        payload.payload ||
+        (payload.details && payload.details.appointment) ||
+        null;
+
+      if (!appointment && payload.id && payload.customer) {
+        appointment = payload;
+      }
+    }
+
+    if (messageText && typeof messageText !== "string") {
+      try {
+        messageText = JSON.stringify(messageText);
+      } catch (error) {
+        messageText = String(messageText);
+      }
+    }
+
+    const normalizedType = this.normalizeAppointmentNotificationType(type);
+
+    if (appointment) {
+      this.updateCachedAppointments(appointment, normalizedType);
+      if (this.appointmentsModalOpen) {
+        this.displayAppointments(this.cachedAppointments.slice());
+      }
+    }
+
+    const message =
+      (typeof messageText === "string" && messageText.trim().length > 0
+        ? messageText
+        : "") ||
+      this.buildAppointmentNotificationMessage(normalizedType, appointment) ||
+      "Appointment update received.";
+
+    this.addNotification({
+      message,
+      type: normalizedType,
+      data: { appointment, raw: payload || rawMessage },
+      read: false,
+    });
+
+    if (this.appointmentsModalOpen) {
+      if (!this.pendingAppointmentsRefresh) {
+        this.pendingAppointmentsRefresh = this.fetchAppointments({ showLoading: false })
+          .catch((error) => {
+            console.error(
+              "Error refreshing appointments after notification:",
+              error
+            );
+          })
+          .finally(() => {
+            this.pendingAppointmentsRefresh = null;
+          });
+      }
+    }
   }
 
   updateDateTime() {
@@ -251,22 +866,39 @@ class POSSystem {
 
   async showAppointmentsModal() {
     const appointmentsModal = document.getElementById("appointmentsModal");
-    appointmentsModal.classList.add("show");
-    await this.fetchAppointments();
+    if (appointmentsModal) {
+      appointmentsModal.classList.add("show");
+    }
+    this.appointmentsModalOpen = true;
+    await this.fetchAppointments({ showLoading: true, force: true });
   }
 
   hideAppointmentsModal() {
     const appointmentsModal = document.getElementById("appointmentsModal");
-    appointmentsModal.classList.remove("show");
+    if (appointmentsModal) {
+      appointmentsModal.classList.remove("show");
+    }
+    this.appointmentsModalOpen = false;
   }
 
-  async fetchAppointments() {
+  async fetchAppointments(options = {}) {
+    const { showLoading = true, force = false } = options;
+
+    if (this.appointmentsFetchCount > 0 && !force) {
+      return;
+    }
+
     const appointmentsList = document.getElementById("appointmentsList");
-    appointmentsList.innerHTML = "<p>Loading appointments...</p>";
+    if (appointmentsList && showLoading) {
+      appointmentsList.innerHTML = "<p>Loading appointments...</p>";
+    }
+
+    this.appointmentsFetchCount += 1;
+    this.isFetchingAppointments = true;
 
     try {
       const accessToken = sessionStorage.getItem("accessToken");
-      const response = await fetch("http://localhost:3000/appointments", {
+      const response = await fetch(`${this.apiBaseUrl}/appointments`, {
         headers: {
           "Authorization": `Bearer ${accessToken}`
         }
@@ -279,46 +911,74 @@ class POSSystem {
       const appointments = await response.json();
       this.displayAppointments(appointments);
     } catch (error) {
-      appointmentsList.innerHTML = `<p>Error: ${error.message}</p>`;
+      if (appointmentsList && showLoading) {
+        appointmentsList.innerHTML = `<p>Error: ${error.message}</p>`;
+      }
       console.error("Error fetching appointments:", error);
+    } finally {
+      this.appointmentsFetchCount = Math.max(0, this.appointmentsFetchCount - 1);
+      this.isFetchingAppointments = this.appointmentsFetchCount > 0;
     }
   }
 
   displayAppointments(appointments) {
+    this.cachedAppointments = Array.isArray(appointments)
+      ? appointments.slice()
+      : [];
+
     const appointmentsList = document.getElementById("appointmentsList");
+    if (!appointmentsList) {
+      return;
+    }
+
     appointmentsList.innerHTML = "";
 
-    if (appointments.length === 0) {
+    if (!this.cachedAppointments.length) {
       appointmentsList.innerHTML = "<p>No appointments found.</p>";
       return;
     }
 
-    appointments.forEach(appointment => {
+    this.cachedAppointments.forEach(appointment => {
+      const customerName = appointment?.customer?.name || "Unknown";
+      const appointmentDate = appointment?.date
+        ? new Date(appointment.date).toLocaleDateString()
+        : "N/A";
+      const startTime = appointment?.startTime || "";
+      const endTime = appointment?.endTime || "";
+      const timeDisplay = startTime && endTime
+        ? `${startTime} - ${endTime}`
+        : startTime || endTime || "N/A";
       const appointmentElement = document.createElement("div");
+      const appointmentId =
+        appointment?.id ?? appointment?._id ?? appointment?.appointmentId ?? "";
       appointmentElement.classList.add("appointment-item");
       appointmentElement.innerHTML = `
         <div class="appointment-info">
-          <p><strong>Customer:</strong> ${appointment.customer.name}</p>
-          <p><strong>Date:</strong> ${new Date(appointment.date).toLocaleDateString()}</p>
-          <p><strong>Time:</strong> ${appointment.startTime} - ${appointment.endTime}</p>
+          <p><strong>Customer:</strong> ${customerName}</p>
+          <p><strong>Date:</strong> ${appointmentDate}</p>
+          <p><strong>Time:</strong> ${timeDisplay}</p>
         </div>
-        <button class="btn btn-primary select-appointment-btn" data-appointment-id="${appointment.id}">Select</button>
+        <button class="btn btn-primary select-appointment-btn" data-appointment-id="${appointmentId}">Select</button>
       `;
       appointmentsList.appendChild(appointmentElement);
     });
 
-    document.querySelectorAll(".select-appointment-btn").forEach(btn => {
+    appointmentsList.querySelectorAll(".select-appointment-btn").forEach((btn) => {
       btn.addEventListener("click", (e) => {
-        const appointmentId = e.target.dataset.appointmentId;
+        const appointmentId = e.currentTarget.dataset.appointmentId;
         this.selectAppointment(appointmentId);
       });
     });
   }
 
   async selectAppointment(appointmentId) {
+    if (!appointmentId) {
+      console.warn("Attempted to select appointment without an identifier.");
+      return;
+    }
     try {
       const accessToken = sessionStorage.getItem("accessToken");
-      const response = await fetch(`http://localhost:3000/appointments/${appointmentId}`, {
+      const response = await fetch(`${this.apiBaseUrl}/appointments/${appointmentId}`, {
         headers: {
           "Authorization": `Bearer ${accessToken}`
         }
@@ -540,7 +1200,10 @@ document.addEventListener("DOMContentLoaded", () => {
     cashierEl.textContent = `Cashier: ${cashier}`;
   }
   pos = new POSSystem();
+  window.pos = pos;
 });
 
-// Make functions available globally for onclick handlers
-window.pos = pos;
+// Make functions available globally for onclick handlers (fallback)
+if (typeof window !== "undefined" && !window.pos) {
+  window.pos = pos;
+}

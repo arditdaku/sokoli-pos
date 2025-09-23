@@ -15,6 +15,7 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
+    <div class="notification-toasts" id="notificationToasts"></div>
     <div class="app-container">
       <!-- Header -->
       <header class="header">
@@ -24,6 +25,25 @@
         <div class="header-info">
           <span class="date-time" id="dateTime"></span>
           <span class="cashier">Cashier: Admin</span>
+          <div class="notifications" id="notifications">
+            <button
+              class="notifications-toggle"
+              id="notificationsToggle"
+              aria-haspopup="true"
+              aria-expanded="false"
+              title="View appointment notifications"
+            >
+              🔔
+              <span class="notification-count hidden" id="notificationCount"
+                >0</span
+              >
+            </button>
+            <div class="notifications-dropdown" id="notificationsDropdown">
+              <div class="notifications-list" id="notificationsList">
+                <p class="notifications-empty">No notifications yet.</p>
+              </div>
+            </div>
+          </div>
           <button class="btn btn-secondary" id="logout">Logout</button>
         </div>
       </header>
