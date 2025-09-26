@@ -305,6 +305,11 @@
       <div class="modal-content">
         <div class="receipt" id="receipt">
           <div class="receipt-header">
+            <img
+              id="receiptLogo"
+              class="receipt-logo"
+              alt="Salon logo"
+            />
             <h2>Hair Salon</h2>
             <p>123 Beauty Street</p>
             <p>Phone: (555) 123-4567</p>
@@ -327,6 +332,21 @@
           <div class="receipt-footer">
             <p>Thank you for your visit!</p>
             <p>Please come again</p>
+            <div class="receipt-qr hidden" id="receiptQrContainer">
+              <img
+                id="receiptQr"
+                alt="QR code that links to our landing page"
+              />
+              <p class="receipt-qr-caption">Scan to visit our landing page</p>
+              <a
+                id="receiptQrLink"
+                class="receipt-qr-link"
+                href="https://example.com/landing"
+                target="_blank"
+                rel="noopener"
+                >https://example.com/landing</a
+              >
+            </div>
           </div>
         </div>
         <div class="modal-actions">
@@ -353,6 +373,7 @@
       </div>
     </div>
 
+    <script src="./node_modules/qrious/dist/qrious.js"></script>
     <script src="script.js"></script>
   </body>
 </html>

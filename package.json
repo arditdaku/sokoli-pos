@@ -18,7 +18,8 @@
     "electron": "^37.2.6"
   },
   "dependencies": {
-    "escpos": "^3.0.0-alpha.6"
+    "escpos": "^3.0.0-alpha.6",
+    "qrious": "^4.0.2"
   },
   "config": {
     "forge": {
