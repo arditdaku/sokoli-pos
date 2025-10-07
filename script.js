@@ -1119,6 +1119,15 @@ class POSSystem {
     // Try to use Electron IPC for Epson printer
     if (window.electronAPI && window.electronAPI.printInvoiceAndOpenDrawer) {
       try {
+        // First, detect the printer
+        if (window.electronAPI.detectPrinter) {
+          const detectionResult = await window.electronAPI.detectPrinter();
+          if (!detectionResult.success) {
+            alert("Printer not detected: " + detectionResult.message + "\nFalling back to browser print.");
+          }
+        }
+        
+        // Attempt to print and open drawer
         const result = await window.electronAPI.printInvoiceAndOpenDrawer({
           header: header + date,
           customer,
@@ -1127,13 +1136,13 @@ class POSSystem {
           footer,
         });
         if (result && result.success) {
-          alert("Printed to Epson printer and opened cash drawer.");
+          alert(result.message || "Printed to Epson printer and opened cash drawer.");
           return;
         } else {
-          alert("Printer error: " + (result?.error || "Unknown error"));
+          alert("Printer error: " + (result?.error || "Unknown error") + "\nFalling back to browser print.");
         }
       } catch (e) {
-        alert("Printer error: " + e.message);
+        alert("Printer error: " + e.message + "\nFalling back to browser print.");
       }
     }
 
