@@ -67,8 +67,21 @@ class POSSystem {
     this.appointmentsFetchCount = 0;
     this.isShuttingDown = false;
 
+    this.ptoStorageKey = "salonPosPtoRequests";
+    this.ptoRequests = this.loadPtoRequests();
+    this.ptoModal = null;
+    this.ptoForm = null;
+    this.ptoSummaryContainer = null;
+    this.ptoRequestsBody = null;
+    this.ptoEmptyState = null;
+    this.managePtoButton = null;
+    this.closePtoModalButton = null;
+    this.ptoStartInput = null;
+    this.ptoEndInput = null;
+
     this.initializeNotificationSystem();
     this.initializeEventListeners();
+    this.initializePtoManagement();
     this.updateDateTime();
     this.showServices("haircut");
 
@@ -153,10 +166,96 @@ class POSSystem {
     document.querySelectorAll(".modal").forEach((modal) => {
       modal.addEventListener("click", (e) => {
         if (e.target === modal) {
-          modal.classList.remove("show");
+          if (modal.id === "ptoModal") {
+            this.hidePtoModal();
+          } else {
+            modal.classList.remove("show");
+          }
         }
       });
     });
+  }
+
+  initializePtoManagement() {
+    this.ptoModal = document.getElementById("ptoModal");
+    this.ptoForm = document.getElementById("ptoForm");
+    this.ptoSummaryContainer = document.getElementById("ptoSummary");
+    this.ptoRequestsBody = document.getElementById("ptoRequestsBody");
+    this.ptoEmptyState = document.getElementById("ptoEmptyState");
+    this.managePtoButton = document.getElementById("managePto");
+    this.closePtoModalButton = document.getElementById("closePtoModal");
+    this.ptoStartInput = document.getElementById("ptoStart");
+    this.ptoEndInput = document.getElementById("ptoEnd");
+
+    if (this.managePtoButton) {
+      this.managePtoButton.addEventListener("click", () => {
+        this.showPtoModal();
+      });
+    }
+
+    if (this.closePtoModalButton) {
+      this.closePtoModalButton.addEventListener("click", () => {
+        this.hidePtoModal();
+      });
+    }
+
+    if (this.ptoForm) {
+      this.ptoForm.addEventListener("submit", (event) => {
+        event.preventDefault();
+        this.handlePtoFormSubmit();
+      });
+
+      this.ptoForm.addEventListener("reset", () => {
+        window.setTimeout(() => {
+          this.resetPtoDateConstraints();
+        }, 0);
+      });
+    }
+
+    if (this.ptoRequestsBody) {
+      this.ptoRequestsBody.addEventListener("click", (event) => {
+        const actionButton = event.target.closest("[data-pto-action]");
+        if (!actionButton) {
+          return;
+        }
+
+        const requestId = actionButton.getAttribute("data-request-id");
+        const action = actionButton.getAttribute("data-pto-action");
+
+        if (requestId && action) {
+          this.handlePtoAction(requestId, action);
+        }
+      });
+    }
+
+    this.resetPtoDateConstraints();
+
+    if (this.ptoStartInput) {
+      this.ptoStartInput.addEventListener("change", () => {
+        this.syncPtoEndDateConstraint();
+      });
+    }
+
+    if (this.ptoEndInput) {
+      this.ptoEndInput.addEventListener("change", () => {
+        if (
+          this.ptoStartInput &&
+          this.ptoEndInput.value &&
+          this.ptoStartInput.value &&
+          this.ptoEndInput.value < this.ptoStartInput.value
+        ) {
+          this.ptoEndInput.value = this.ptoStartInput.value;
+        }
+      });
+    }
+
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && this.ptoModal && this.ptoModal.classList.contains("show")) {
+        this.hidePtoModal();
+      }
+    });
+
+    this.renderPtoRequests();
   }
 
   updateReceiptBranding() {
@@ -256,6 +355,506 @@ class POSSystem {
     } else {
       this.showNotificationsDropdown();
     }
+  }
+
+  loadPtoRequests() {
+    if (typeof window === "undefined" || typeof window.localStorage === "undefined") {
+      return this.getSeedPtoRequests();
+    }
+
+    try {
+      const raw = window.localStorage.getItem(this.ptoStorageKey);
+      if (!raw) {
+        return this.getSeedPtoRequests();
+      }
+
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) {
+        return this.getSeedPtoRequests();
+      }
+
+      return parsed
+        .filter((entry) => entry && typeof entry === "object")
+        .map((entry) => ({
+          id: entry.id || this.generatePtoId(),
+          worker: typeof entry.worker === "string" ? entry.worker : "Team member",
+          startDate: entry.startDate || entry.start || "",
+          endDate: entry.endDate || entry.end || entry.startDate || "",
+          notes: typeof entry.notes === "string" ? entry.notes : "",
+          status: this.normalizePtoStatus(entry.status),
+          createdAt:
+            typeof entry.createdAt === "string" && entry.createdAt
+              ? entry.createdAt
+              : new Date().toISOString(),
+          updatedAt:
+            typeof entry.updatedAt === "string" && entry.updatedAt
+              ? entry.updatedAt
+              : entry.createdAt || new Date().toISOString(),
+        }));
+    } catch (error) {
+      console.error("Failed to load PTO requests from storage:", error);
+      return this.getSeedPtoRequests();
+    }
+  }
+
+  getSeedPtoRequests() {
+    const today = new Date();
+
+    const upcomingStart = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 7);
+    const upcomingEnd = new Date(upcomingStart.getTime());
+    upcomingEnd.setDate(upcomingEnd.getDate() + 2);
+
+    const recentStart = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 10);
+    const recentEnd = new Date(recentStart.getTime());
+    recentEnd.setDate(recentEnd.getDate() + 2);
+
+    return [
+      {
+        id: this.generatePtoId(),
+        worker: "Alex Johnson",
+        startDate: this.formatDateInput(upcomingStart),
+        endDate: this.formatDateInput(upcomingEnd),
+        notes: "Family vacation",
+        status: "Pending",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+      {
+        id: this.generatePtoId(),
+        worker: "Maria Lopez",
+        startDate: this.formatDateInput(recentStart),
+        endDate: this.formatDateInput(recentEnd),
+        notes: "Hair styling conference",
+        status: "Approved",
+        createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 21).toISOString(),
+        updatedAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 7).toISOString(),
+      },
+    ];
+  }
+
+  savePtoRequests() {
+    if (typeof window === "undefined" || typeof window.localStorage === "undefined") {
+      return;
+    }
+
+    try {
+      window.localStorage.setItem(this.ptoStorageKey, JSON.stringify(this.ptoRequests));
+    } catch (error) {
+      console.error("Failed to persist PTO requests:", error);
+    }
+  }
+
+  handlePtoFormSubmit() {
+    if (!this.ptoForm) {
+      return;
+    }
+
+    const formData = new FormData(this.ptoForm);
+    const worker = (formData.get("worker") || "").toString().trim();
+    const startDate = (formData.get("start") || "").toString();
+    const endDateRaw = (formData.get("end") || "").toString();
+    const notes = (formData.get("notes") || "").toString().trim();
+    const endDate = endDateRaw || startDate;
+
+    if (!worker) {
+      this.showNotificationToast({
+        message: "Please add the team member's name for the request.",
+        duration: 4500,
+      });
+      return;
+    }
+
+    if (!startDate) {
+      this.showNotificationToast({
+        message: "A start date is required to log time off.",
+        duration: 4500,
+      });
+      return;
+    }
+
+    if (endDate && startDate && endDate < startDate) {
+      this.showNotificationToast({
+        message: "The end date cannot be earlier than the start date.",
+        duration: 5000,
+      });
+      return;
+    }
+
+    const newRequest = {
+      id: this.generatePtoId(),
+      worker,
+      startDate,
+      endDate,
+      notes,
+      status: "Pending",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    this.ptoRequests.unshift(newRequest);
+    this.savePtoRequests();
+    this.renderPtoRequests();
+    this.ptoForm.reset();
+    this.resetPtoDateConstraints();
+
+    this.showNotificationToast({
+      message: `Logged a time off request for ${worker}.`,
+      duration: 4500,
+    });
+  }
+
+  resetPtoDateConstraints() {
+    const today = this.formatDateInput(new Date());
+    if (!today) {
+      return;
+    }
+
+    if (this.ptoStartInput) {
+      this.ptoStartInput.setAttribute("min", today);
+      if (!this.ptoStartInput.value) {
+        this.ptoStartInput.value = today;
+      }
+    }
+
+    if (this.ptoEndInput) {
+      this.ptoEndInput.setAttribute("min", this.ptoStartInput ? this.ptoStartInput.value || today : today);
+      if (!this.ptoEndInput.value && this.ptoStartInput && this.ptoStartInput.value) {
+        this.ptoEndInput.value = this.ptoStartInput.value;
+      }
+    }
+  }
+
+  syncPtoEndDateConstraint() {
+    if (!this.ptoStartInput || !this.ptoEndInput) {
+      return;
+    }
+
+    const startValue = this.ptoStartInput.value;
+    if (!startValue) {
+      return;
+    }
+
+    this.ptoEndInput.setAttribute("min", startValue);
+    if (this.ptoEndInput.value && this.ptoEndInput.value < startValue) {
+      this.ptoEndInput.value = startValue;
+    }
+  }
+
+  showPtoModal() {
+    if (!this.ptoModal) {
+      return;
+    }
+
+    this.renderPtoRequests();
+    this.ptoModal.classList.add("show");
+    this.ptoModal.setAttribute("aria-hidden", "false");
+  }
+
+  hidePtoModal() {
+    if (!this.ptoModal) {
+      return;
+    }
+
+    this.ptoModal.classList.remove("show");
+    this.ptoModal.setAttribute("aria-hidden", "true");
+  }
+
+  renderPtoRequests() {
+    if (!this.ptoRequestsBody) {
+      return;
+    }
+
+    this.ptoRequestsBody.innerHTML = "";
+
+    if (!Array.isArray(this.ptoRequests) || this.ptoRequests.length === 0) {
+      if (this.ptoEmptyState) {
+        this.ptoEmptyState.classList.remove("hidden");
+      }
+      this.updatePtoSummary();
+      return;
+    }
+
+    if (this.ptoEmptyState) {
+      this.ptoEmptyState.classList.add("hidden");
+    }
+
+    const fragment = document.createDocumentFragment();
+
+    this.ptoRequests.forEach((request) => {
+      const row = document.createElement("tr");
+      row.setAttribute("data-request-id", request.id);
+
+      const workerCell = document.createElement("td");
+      workerCell.textContent = request.worker;
+      row.appendChild(workerCell);
+
+      const datesCell = document.createElement("td");
+      datesCell.textContent = this.formatDateRange(request.startDate, request.endDate);
+      row.appendChild(datesCell);
+
+      const statusCell = document.createElement("td");
+      const statusBadge = document.createElement("span");
+      const statusClass = (request.status || "Pending").toLowerCase();
+      statusBadge.classList.add("status-badge", statusClass);
+      statusBadge.textContent = this.normalizePtoStatus(request.status);
+      statusCell.appendChild(statusBadge);
+      row.appendChild(statusCell);
+
+      const requestedCell = document.createElement("td");
+      requestedCell.textContent = this.formatDateForDisplay(request.createdAt);
+      row.appendChild(requestedCell);
+
+      const notesCell = document.createElement("td");
+      notesCell.textContent = request.notes ? request.notes : "—";
+      row.appendChild(notesCell);
+
+      const actionsCell = document.createElement("td");
+      actionsCell.classList.add("actions-cell");
+      const actionGroup = document.createElement("div");
+      actionGroup.classList.add("pto-action-group");
+
+      if (request.status !== "Approved") {
+        actionGroup.appendChild(
+          this.createPtoActionButton("Approve", "approve", "approve", request.id)
+        );
+      }
+
+      if (request.status !== "Denied") {
+        actionGroup.appendChild(
+          this.createPtoActionButton("Deny", "deny", "deny", request.id)
+        );
+      }
+
+      if (request.status !== "Pending") {
+        actionGroup.appendChild(
+          this.createPtoActionButton("Reopen", "revert", "revert", request.id)
+        );
+      }
+
+      actionGroup.appendChild(
+        this.createPtoActionButton("Remove", "delete", "delete", request.id)
+      );
+
+      actionsCell.appendChild(actionGroup);
+      row.appendChild(actionsCell);
+
+      fragment.appendChild(row);
+    });
+
+    this.ptoRequestsBody.appendChild(fragment);
+    this.updatePtoSummary();
+  }
+
+  updatePtoSummary() {
+    if (!this.ptoSummaryContainer) {
+      return;
+    }
+
+    const requests = Array.isArray(this.ptoRequests) ? this.ptoRequests : [];
+    const total = requests.length;
+    const pending = requests.filter((request) => request.status === "Pending").length;
+    const approved = requests.filter((request) => request.status === "Approved").length;
+    const denied = requests.filter((request) => request.status === "Denied").length;
+
+    const today = new Date();
+    const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const upcoming = requests.filter((request) => {
+      if (request.status !== "Approved") {
+        return false;
+      }
+      const endDate = this.parseDate(request.endDate);
+      return endDate && endDate >= todayStart;
+    }).length;
+
+    const summaryItems = [
+      { label: "Pending approvals", value: pending },
+      { label: "Upcoming vacations", value: upcoming },
+      { label: "Approved", value: approved },
+      { label: "Denied", value: denied },
+      { label: "Total requests", value: total },
+    ];
+
+    this.ptoSummaryContainer.innerHTML = "";
+    const fragment = document.createDocumentFragment();
+
+    summaryItems.forEach((item) => {
+      const card = document.createElement("article");
+      card.classList.add("summary-card");
+
+      const heading = document.createElement("h3");
+      heading.textContent = item.label;
+      card.appendChild(heading);
+
+      const value = document.createElement("p");
+      value.textContent = item.value;
+      card.appendChild(value);
+
+      fragment.appendChild(card);
+    });
+
+    this.ptoSummaryContainer.appendChild(fragment);
+  }
+
+  createPtoActionButton(label, action, modifier, requestId) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.classList.add("btn-action");
+    if (modifier) {
+      button.classList.add(modifier);
+    }
+    button.setAttribute("data-pto-action", action);
+    button.setAttribute("data-request-id", requestId);
+    button.textContent = label;
+    return button;
+  }
+
+  handlePtoAction(requestId, action) {
+    if (!requestId || !action) {
+      return;
+    }
+
+    const requestIndex = this.ptoRequests.findIndex((request) => request.id === requestId);
+    if (requestIndex === -1) {
+      return;
+    }
+
+    const request = this.ptoRequests[requestIndex];
+    const normalizedAction = action.toLowerCase();
+
+    if (normalizedAction === "delete") {
+      const workerName = request.worker;
+      this.ptoRequests.splice(requestIndex, 1);
+      this.savePtoRequests();
+      this.renderPtoRequests();
+      this.showNotificationToast({
+        message: `Removed the request for ${workerName}.`,
+        duration: 4000,
+      });
+      return;
+    }
+
+    let nextStatus = null;
+    if (normalizedAction === "approve") {
+      nextStatus = "Approved";
+    } else if (normalizedAction === "deny") {
+      nextStatus = "Denied";
+    } else if (normalizedAction === "revert") {
+      nextStatus = "Pending";
+    }
+
+    if (!nextStatus || request.status === nextStatus) {
+      return;
+    }
+
+    request.status = nextStatus;
+    request.updatedAt = new Date().toISOString();
+    this.ptoRequests[requestIndex] = request;
+    this.savePtoRequests();
+    this.renderPtoRequests();
+
+    const feedbackMessages = {
+      Approved: `Approved ${request.worker}'s time off request.`,
+      Denied: `Denied ${request.worker}'s request.`,
+      Pending: `Reopened ${request.worker}'s request for review.`,
+    };
+
+    this.showNotificationToast({
+      message: feedbackMessages[nextStatus] || "Updated the request.",
+      duration: 4200,
+    });
+  }
+
+  normalizePtoStatus(status) {
+    if (typeof status !== "string") {
+      return "Pending";
+    }
+
+    const normalized = status.trim().toLowerCase();
+    if (normalized === "approved") {
+      return "Approved";
+    }
+    if (normalized === "denied") {
+      return "Denied";
+    }
+    return "Pending";
+  }
+
+  formatDateRange(start, end) {
+    const startDate = this.parseDate(start);
+    const endDate = this.parseDate(end);
+
+    if (startDate && endDate) {
+      if (startDate.getTime() === endDate.getTime()) {
+        return this.formatShortDate(startDate);
+      }
+      return `${this.formatShortDate(startDate)} – ${this.formatShortDate(endDate)}`;
+    }
+
+    if (startDate) {
+      return this.formatShortDate(startDate);
+    }
+
+    if (endDate) {
+      return this.formatShortDate(endDate);
+    }
+
+    return "—";
+  }
+
+  formatDateForDisplay(value) {
+    if (!value) {
+      return "—";
+    }
+
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) {
+      return "—";
+    }
+
+    return new Intl.DateTimeFormat(undefined, {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    }).format(parsed);
+  }
+
+  formatShortDate(date) {
+    if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
+      return "—";
+    }
+
+    return new Intl.DateTimeFormat(undefined, {
+      month: "short",
+      day: "numeric",
+    }).format(date);
+  }
+
+  parseDate(value) {
+    if (!value) {
+      return null;
+    }
+
+    const parsed = new Date(`${value}T00:00:00`);
+    if (Number.isNaN(parsed.getTime())) {
+      return null;
+    }
+    return parsed;
+  }
+
+  formatDateInput(date) {
+    if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
+      return "";
+    }
+
+    return date.toISOString().split("T")[0];
+  }
+
+  generatePtoId() {
+    if (typeof crypto !== "undefined" && crypto.randomUUID) {
+      return crypto.randomUUID();
+    }
+
+    return `pto-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   }
 
   showNotificationsDropdown() {

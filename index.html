@@ -44,6 +44,9 @@
               </div>
             </div>
           </div>
+          <button class="btn btn-secondary" id="managePto">
+            Manage PTO
+          </button>
           <button class="btn btn-secondary" id="logout">Logout</button>
         </div>
       </header>
@@ -373,7 +376,77 @@
       </div>
     </div>
 
-    <script src="./node_modules/qrious/dist/qrious.js"></script>
+    <!-- PTO Management Modal -->
+    <div class="modal" id="ptoModal" aria-hidden="true">
+      <div class="modal-content modal-lg" role="dialog" aria-modal="true">
+        <div class="modal-header">
+          <h2>Team PTO &amp; Vacation Requests</h2>
+          <button class="modal-close" id="closePtoModal" aria-label="Close PTO manager">
+            &times;
+          </button>
+        </div>
+
+        <section class="pto-summary" id="ptoSummary">
+          <!-- Summary will be populated dynamically -->
+        </section>
+
+        <form class="pto-form" id="ptoForm">
+          <h3>Log a new time off request</h3>
+          <div class="form-grid">
+            <label>
+              <span>Team member</span>
+              <input type="text" id="ptoWorker" name="worker" required placeholder="e.g. Jane Doe" />
+            </label>
+            <label>
+              <span>Start date</span>
+              <input type="date" id="ptoStart" name="start" required />
+            </label>
+            <label>
+              <span>End date</span>
+              <input type="date" id="ptoEnd" name="end" required />
+            </label>
+            <label class="form-full">
+              <span>Notes</span>
+              <textarea
+                id="ptoNotes"
+                name="notes"
+                rows="2"
+                placeholder="Optional: coverage details, special instructions"
+              ></textarea>
+            </label>
+          </div>
+          <div class="modal-actions">
+            <button class="btn btn-secondary" type="reset">Reset</button>
+            <button class="btn btn-primary" type="submit">Add Request</button>
+          </div>
+        </form>
+
+        <section class="pto-requests">
+          <div class="pto-requests-header">
+            <h3>Pending &amp; historical requests</h3>
+          </div>
+          <div class="table-wrapper">
+            <table class="pto-table" aria-live="polite">
+              <thead>
+                <tr>
+                  <th scope="col">Team member</th>
+                  <th scope="col">Dates</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Requested</th>
+                  <th scope="col">Notes</th>
+                  <th scope="col" class="actions-header">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="ptoRequestsBody">
+                <!-- Requests will be rendered here -->
+              </tbody>
+            </table>
+            <p class="pto-empty" id="ptoEmptyState">No time off requests logged yet.</p>
+          </div>
+        </section>
+      </div>
+    </div>
+
     <script src="script.js"></script>
   </body>
 </html>
