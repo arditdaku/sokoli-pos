@@ -1,10 +1,30 @@
 // POS System JavaScript
 
+const DEFAULT_LANDING_PAGE_URL = "https://example.com/landing";
+const DEFAULT_LOGO_SVG = `
+<svg xmlns="http://www.w3.org/2000/svg" width="200" height="80" viewBox="0 0 200 80">
+  <defs>
+    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#c77e4d" />
+      <stop offset="100%" stop-color="#8c3f2e" />
+    </linearGradient>
+  </defs>
+  <rect width="200" height="80" rx="16" fill="url(#grad)" />
+  <text x="50%" y="52" text-anchor="middle" font-family="'Segoe UI', sans-serif" font-size="28" fill="#f5f5f5">Salon POS</text>
+</svg>`;
+const DEFAULT_LOGO_DATA_URL = `data:image/svg+xml;utf8,${encodeURIComponent(
+  DEFAULT_LOGO_SVG
+)}`;
+
 class POSSystem {
   constructor() {
     this.orderItems = [];
     this.selectedPaymentMethod = "cash";
     this.taxRate = 0.0825; // 8.25%
+
+    this.landingPageUrl = DEFAULT_LANDING_PAGE_URL;
+    this.logoDataUrl = DEFAULT_LOGO_DATA_URL;
+    this.qrCodeSize = 160;
 
     this.apiBaseUrl = "http://localhost:3000";
     this.appointmentNotificationsPath = "/appointments/notifications";
@@ -22,6 +42,12 @@ class POSSystem {
       typeof globalConfig.appointmentNotificationsPath === "string"
     ) {
       this.appointmentNotificationsPath = globalConfig.appointmentNotificationsPath;
+    }
+    if (globalConfig && typeof globalConfig.landingPageUrl === "string") {
+      this.landingPageUrl = globalConfig.landingPageUrl;
+    }
+    if (globalConfig && typeof globalConfig.logoDataUrl === "string") {
+      this.logoDataUrl = globalConfig.logoDataUrl;
     }
 
     this.notifications = [];
@@ -63,6 +89,8 @@ class POSSystem {
     setInterval(() => this.updateDateTime(), 1000);
 
     this.initializeAppointmentWebSocket();
+
+    this.updateReceiptBranding();
 
     window.addEventListener("beforeunload", () => {
       this.isShuttingDown = true;
@@ -228,6 +256,55 @@ class POSSystem {
     });
 
     this.renderPtoRequests();
+  }
+
+  updateReceiptBranding() {
+    const logoElement = document.getElementById("receiptLogo");
+    if (logoElement) {
+      if (this.logoDataUrl) {
+        logoElement.src = this.logoDataUrl;
+        logoElement.classList.remove("hidden");
+      } else {
+        logoElement.classList.add("hidden");
+      }
+    }
+
+    const qrContainer = document.getElementById("receiptQrContainer");
+    const qrImage = document.getElementById("receiptQr");
+    const qrLink = document.getElementById("receiptQrLink");
+
+    if (!qrContainer || !qrImage || !qrLink) {
+      return;
+    }
+
+    if (!this.landingPageUrl) {
+      qrContainer.classList.add("hidden");
+      return;
+    }
+
+    qrLink.textContent = this.landingPageUrl;
+    qrLink.href = this.landingPageUrl;
+
+    if (window.QRious) {
+      try {
+        const qr = new window.QRious({
+          value: this.landingPageUrl,
+          size: this.qrCodeSize,
+          level: "H",
+        });
+        qrImage.src = qr.toDataURL();
+        qrImage.alt = "QR code linking to landing page";
+        qrImage.classList.remove("hidden");
+      } catch (error) {
+        console.error("Unable to generate QR code:", error);
+        qrImage.classList.add("hidden");
+      }
+      qrContainer.classList.remove("hidden");
+    } else {
+      console.warn("QRious library not available. Displaying landing page URL only.");
+      qrImage.classList.add("hidden");
+      qrContainer.classList.remove("hidden");
+    }
   }
 
   initializeNotificationSystem() {
@@ -1694,10 +1771,14 @@ class POSSystem {
       changeLine.classList.remove("show");
     }
 
+    this.updateReceiptBranding();
+
     document.getElementById("receiptModal").classList.add("show");
   }
 
   async printReceipt() {
+    this.updateReceiptBranding();
+
     // Prepare plain text for ESC/POS printer
     const header = "Hair Salon\n123 Beauty Street\nPhone: (555) 123-4567\n";
     const date = `Date: ${new Date().toLocaleDateString()}\n`;
@@ -1710,14 +1791,31 @@ class POSSystem {
         )
         .join("\n") + "\n";
     const summary = `Subtotal: ${this.getSubtotal().toFixed(2)}\nTax: ${this.getTax().toFixed(2)}\nTotal: ${this.getTotal().toFixed(2)}\nPayment: ${this.selectedPaymentMethod.charAt(0).toUpperCase() + this.selectedPaymentMethod.slice(1)}\n`;
-    const change = document.getElementById("receiptChange")?.textContent || "";
-    const footer =
-      (change ? `Change: ${change}\n` : "") +
-      "\nThank you for your visit!\nPlease come again\n";
+    const change = document
+      .getElementById("receiptChange")
+      ?.textContent.trim();
+    const footerLines = [];
+    if (change) {
+      footerLines.push(`Change: ${change}`);
+    }
+    if (this.landingPageUrl) {
+      footerLines.push(`Scan to visit: ${this.landingPageUrl}`);
+    }
+    footerLines.push("", "Thank you for your visit!", "Please come again", "");
+    const footer = footerLines.join("\n");
 
     // Try to use Electron IPC for Epson printer
     if (window.electronAPI && window.electronAPI.printInvoiceAndOpenDrawer) {
       try {
+        // First, detect the printer
+        if (window.electronAPI.detectPrinter) {
+          const detectionResult = await window.electronAPI.detectPrinter();
+          if (!detectionResult.success) {
+            alert("Printer not detected: " + detectionResult.message + "\nFalling back to browser print.");
+          }
+        }
+        
+        // Attempt to print and open drawer
         const result = await window.electronAPI.printInvoiceAndOpenDrawer({
           header: header + date,
           customer,
@@ -1726,13 +1824,13 @@ class POSSystem {
           footer,
         });
         if (result && result.success) {
-          alert("Printed to Epson printer and opened cash drawer.");
+          alert(result.message || "Printed to Epson printer and opened cash drawer.");
           return;
         } else {
-          alert("Printer error: " + (result?.error || "Unknown error"));
+          alert("Printer error: " + (result?.error || "Unknown error") + "\nFalling back to browser print.");
         }
       } catch (e) {
-        alert("Printer error: " + e.message);
+        alert("Printer error: " + e.message + "\nFalling back to browser print.");
       }
     }
 
@@ -1747,9 +1845,26 @@ class POSSystem {
             body { font-family: 'Courier New', monospace; margin: 20px; }
             .receipt { max-width: 300px; }
             .receipt-item { display: flex; justify-content: space-between; }
-            .receipt-header { text-align: center; border-bottom: 1px dashed #ccc; padding-bottom: 10px; margin-bottom: 10px; }
+            .receipt-header {
+              text-align: center;
+              border-bottom: 1px dashed #ccc;
+              padding-bottom: 10px;
+              margin-bottom: 10px;
+            }
+            .receipt-logo { display: block; margin: 0 auto 12px; max-width: 140px; }
             .receipt-total { border-top: 1px dashed #ccc; padding-top: 10px; }
             .receipt-footer { text-align: center; font-style: italic; margin-top: 20px; }
+            .receipt-qr { margin-top: 16px; }
+            .receipt-qr img { display: block; margin: 8px auto; width: 140px; height: 140px; }
+            .receipt-qr-caption { font-style: normal; font-size: 0.85rem; color: #333; }
+            .receipt-qr-link {
+              display: block;
+              font-style: normal;
+              font-size: 0.75rem;
+              color: #333;
+              word-break: break-all;
+              text-decoration: none;
+            }
           </style>
         </head>
         <body>

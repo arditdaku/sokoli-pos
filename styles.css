@@ -859,6 +859,12 @@ body {
   margin-bottom: 1rem;
 }
 
+.receipt-logo {
+  display: block;
+  margin: 0 auto 0.75rem;
+  max-width: 140px;
+}
+
 .receipt-header h2 {
   font-size: 1.2rem;
   margin-bottom: 0.5rem;
@@ -891,6 +897,37 @@ body {
   text-align: center;
   font-style: italic;
   color: #5e3f35;
+}
+
+.receipt-qr {
+  margin-top: 1rem;
+}
+
+.receipt-qr img {
+  display: block;
+  margin: 0.5rem auto;
+  width: 140px;
+  height: 140px;
+}
+
+.receipt-qr-caption {
+  font-style: normal;
+  font-size: 0.85rem;
+  color: #2e2a28;
+}
+
+.receipt-qr-link {
+  display: block;
+  font-style: normal;
+  font-size: 0.75rem;
+  color: #2e2a28;
+  word-break: break-all;
+  text-decoration: none;
+}
+
+.receipt-qr-link:hover,
+.receipt-qr-link:focus {
+  text-decoration: underline;
 }
 
 .change-line {
